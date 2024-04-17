@@ -21,116 +21,158 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
+
+#define TARGALIB_ERROR "targalib.h [ERROR] "
+#define RETURN_FAIL 1
+#define RETURN_SUCCESS 0
 
 typedef struct tga_header {
-	uint8_t id; // Length of the image ID field (0-255)
-	uint8_t image_map_type; // Whether a color map is included 0 = no color-map data. 1 = color-map is included.
-	/*
-    * Compression and color types
-    * 0- No Image Data Included
-    * 1- Uncompressed, Color mapped image
-    * 2- Uncompressed, True Color Image
-    * 9- Run-length encoded, Color mapped image
-    * 11- Run-Length encoded, Black and white image 
-    */
+	uint8_t id_length;
+	uint8_t color_map_type;
 	uint8_t image_type;
-	/*
-    * Image Specifications
-    */
-	uint16_t color_map_origin; // Color map origin (2 bytes)
-	uint16_t color_map_length; // Color map length (2 bytes)
-	uint8_t color_map_depth; // Color map entry size (1 byte)
-	uint16_t x_origin; // X-coordinate of the lower-left corner (2 bytes)
-	uint16_t y_origin; // Y-coordinate of the lower-left corner (2 bytes)
-	uint16_t width; // Width of the image (2 bytes)
-	uint16_t height; // Height of the image (2 bytes)
-	uint8_t pixel_depth; // Pixel depth (1 byte)
-	uint8_t image_descriptor; // Image descriptor byte (1 byte)
-	uint8_t width_high; // High byte of width (for handling endianness)
-	uint8_t height_high; // High byte of height (for handling endianness)
-} tga_header_t;
-
-typedef struct tga_image {
+	uint16_t color_map_origin;
+	uint16_t color_map_length;
+	uint8_t color_map_depth;
+	uint16_t x_origin;
+	uint16_t y_origin;
 	uint16_t width;
 	uint16_t height;
-	uint32_t pixel_count;
-	uint32_t *pixels; // Array of pixel data (format depends on pixel_depth)
+	uint8_t bits_per_pixel;
+	uint8_t image_descriptor;
+} tga_header_t;
+
+typedef struct tga_color {
+	uint8_t r;
+	uint8_t g;
+	uint8_t b;
+	uint8_t a;
+} tga_color_t;
+
+typedef struct tga_image {
+	tga_header_t header;
+	tga_color_t *data;
 } tga_image_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-tga_image_t *load_tga_image(const char *filename);
-bool save_tga_image(const char *filename, tga_image_t *image);
+tga_image_t *tga_new(uint16_t width, uint16_t height);
+void tga_free(tga_image_t *image);
+int tga_read(const char *filename, tga_image_t *image);
+int tga_write(const char *filename, const tga_image_t *image);
 void flip_tga_horizontally();
 void flip_tga_vertically();
-bool scale_tga_image(tga_image_t *image, int new_width, int new_height);
+int scale_tga_image(tga_image_t *image, int new_width, int new_height);
 
 #endif //__TARGALIB_H__
 
-#ifdef __TARGALIB_IMPLEMENTATION__
+//#ifdef TARGALIB_IMPLEMENTATION
 
-tga_image_t *load_tga_image(const char *filename)
-{
-	FILE *file = fopen(filename, "rb");
-	if (file == NULL) {
-		fprintf(stderr,
-			"Error: Unable to open file '%s' for reading.\n",
-			filename);
-		return NULL;
-	}
+tga_image_t *tga_new(uint16_t width, uint16_t height) {
+	tga_image_t* image = (tga_image_t*)malloc(sizeof(tga_image_t));
+    if (!image) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return NULL;
+    }
 
-	tga_header_t header;
-	if (fread(&header, sizeof(tga_header_t), 1, file) != 1) {
-		fprintf(stderr,
-			"Error: Unable to read Targa header from file '%s'.\n",
-			filename);
-		fclose(file);
-		return NULL;
-	}
+    memset(image, 0, sizeof(tga_image_t));
 
-	uint16_t width = header.width | (header.width_high << 8);
-	uint16_t height = header.height | (header.height_high << 8);
+    image->header.width = width;
+    image->header.height = height;
+    image->header.bits_per_pixel = 32; // Assuming 32 bits per pixel RGBA
 
-	tga_image_t *image = (tga_image_t *)malloc(sizeof(tga_image_t));
-	if (image == NULL) {
-		fprintf(stderr,
-			"Error: Memory allocation failed for Targa image struct.\n");
-		fclose(file);
-		return NULL;
-	}
+    size_t dataSize = width * height * sizeof(tga_color_t);
+    image->data = (tga_color_t*)malloc(dataSize);
+    if (!image->data) {
+        fprintf(stderr, "Memory allocation failed\n");
+        free(image);
+        return NULL;
+    }
 
-	image->width = width;
-	image->height = height;
-	image->pixel_count = (uint32_t)width * (uint32_t)height;
+    memset(image->data, 0, dataSize);
 
-	image->pixels =
-		(uint32_t *)malloc(sizeof(uint32_t) * image->pixel_count);
-	if (image->pixels == NULL) {
-		fprintf(stderr,
-			"Error: Memory allocation failed for Targa image pixel data.\n");
-		free(image); // Free previously allocated memory
-		fclose(file);
-		return NULL;
-	}
-
-	if (fread(image->pixels, sizeof(uint32_t), image->pixel_count, file) !=
-	    image->pixel_count) {
-		fprintf(stderr,
-			"Error: Unable to read pixel data from file '%s'.\n",
-			filename);
-		free(image->pixels); // Free allocated pixel data
-		free(image); // Free allocated image struct
-		fclose(file);
-		return NULL;
-	}
-
-	fclose(file);
-	return image;
+    return image;
 }
 
-#endif //__TARGALIB_IMPLEMENTATION__
+int tga_read(const char *filename, tga_image_t *image)
+{
+    FILE *file = fopen(filename, "rb");
+    if (!file) {
+        fprintf(stderr, "%sFailed to open file %s for reading.\n",
+                TARGALIB_ERROR, filename);
+        return RETURN_FAIL;
+    }
+
+    if (fread(&image->header, sizeof(tga_header_t), 1, file) != 1) {
+        fprintf(stderr, "%sFailed to read image headers from %s.\n",
+                TARGALIB_ERROR, filename);
+        fclose(file);
+        return RETURN_FAIL;
+    }
+
+    // Check if the image type is supported (usually uncompressed true-color or grayscale)
+    if (image->header.image_type != 2 && image->header.image_type != 3) {
+        fprintf(stderr, "%sUnsupported image type in %s.\n",
+                TARGALIB_ERROR, filename);
+        fclose(file);
+        return RETURN_FAIL;
+    }
+
+    // Check if the bits per pixel is supported (usually 24 or 32 bits)
+    //
+
+    size_t data_size = image->header.width * image->header.height * sizeof(tga_color_t);
+    image->data = (tga_color_t *)malloc(data_size);
+
+    if (!image->data) {
+        fprintf(stderr, "%sMemory allocation failed for image data %s.\n",
+                TARGALIB_ERROR, filename);
+        fclose(file);
+        return RETURN_FAIL;
+    }
+
+    if (fread(image->data, data_size, 1, file) != 1) {
+        fprintf(stderr, "%sFailed to read image data from %s.\n",
+                TARGALIB_ERROR, filename);
+        fclose(file);
+        free(image->data);
+        return RETURN_FAIL;
+    }
+
+    fclose(file);
+    return RETURN_SUCCESS;
+}
+
+int tga_write(const char *filename, const tga_image_t *image) {
+    FILE *file = fopen(filename, "wb");
+    if (!file) {
+        fprintf(stderr, "%sFailed to open file %s for writing.\n", TARGALIB_ERROR, filename);
+        return RETURN_FAIL;
+    }
+
+    // Write TGA header
+    if (fwrite(&image->header, sizeof(tga_header_t), 1, file) != 1) {
+        fprintf(stderr, "%sFailed to write TGA header to %s.\n", TARGALIB_ERROR, filename);
+        fclose(file);
+        return RETURN_FAIL;
+    }
+
+    // Write image data
+    size_t data_size = image->header.width * image->header.height * sizeof(tga_color_t);
+    if (fwrite(image->data, data_size, 1, file) != 1) {
+        fprintf(stderr, "%sFailed to write image data to %s.\n", TARGALIB_ERROR, filename);
+        fclose(file);
+        return RETURN_FAIL;
+    }
+
+    fclose(file);
+    return RETURN_SUCCESS;
+}
+
+
+//#endif //TARGALIB_IMPLEMENTATION
 /*
 -------------------------------------------------------------------------------
 This software available under unlicense
