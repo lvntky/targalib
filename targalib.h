@@ -62,115 +62,162 @@ tga_image_t *tga_new(uint16_t width, uint16_t height);
 void tga_free(tga_image_t *image);
 int tga_read(const char *filename, tga_image_t *image);
 int tga_write(const char *filename, const tga_image_t *image);
-void flip_tga_horizontally();
-void flip_tga_vertically();
-int scale_tga_image(tga_image_t *image, int new_width, int new_height);
+void tga_flip_horizontally();
+void tga_flip_vertically();
+int tga_resize_image(tga_image_t *image, int new_width, int new_height);
+void tga_print_headers(const tga_image_t *image);
 
 #endif //__TARGALIB_H__
 
 //#ifdef TARGALIB_IMPLEMENTATION
 
-tga_image_t *tga_new(uint16_t width, uint16_t height) {
-	tga_image_t* image = (tga_image_t*)malloc(sizeof(tga_image_t));
-    if (!image) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return NULL;
-    }
+tga_image_t *tga_new(uint16_t width, uint16_t height)
+{
+	tga_image_t *image = (tga_image_t *)malloc(sizeof(tga_image_t));
+	if (!image) {
+		fprintf(stderr, "Memory allocation failed\n");
+		return NULL;
+	}
 
-    memset(image, 0, sizeof(tga_image_t));
+	memset(image, 0, sizeof(tga_image_t));
 
-    image->header.width = width;
-    image->header.height = height;
-    image->header.bits_per_pixel = 32; // Assuming 32 bits per pixel RGBA
+	image->header.width = width;
+	image->header.height = height;
+	image->header.bits_per_pixel = 32; // Assuming 32 bits per pixel RGBA
 
-    size_t dataSize = width * height * sizeof(tga_color_t);
-    image->data = (tga_color_t*)malloc(dataSize);
-    if (!image->data) {
-        fprintf(stderr, "Memory allocation failed\n");
-        free(image);
-        return NULL;
-    }
+	size_t dataSize = width * height * sizeof(tga_color_t);
+	image->data = (tga_color_t *)malloc(dataSize);
+	if (!image->data) {
+		fprintf(stderr, "Memory allocation failed\n");
+		free(image);
+		return NULL;
+	}
 
-    memset(image->data, 0, dataSize);
+	memset(image->data, 0, dataSize);
 
-    return image;
+	return image;
 }
 
 int tga_read(const char *filename, tga_image_t *image)
 {
-    FILE *file = fopen(filename, "rb");
-    if (!file) {
-        fprintf(stderr, "%sFailed to open file %s for reading.\n",
-                TARGALIB_ERROR, filename);
-        return RETURN_FAIL;
-    }
+	FILE *file = fopen(filename, "rb");
+	if (!file) {
+		fprintf(stderr, "%sFailed to open file %s for reading.\n",
+			TARGALIB_ERROR, filename);
+		return RETURN_FAIL;
+	}
 
-    if (fread(&image->header, sizeof(tga_header_t), 1, file) != 1) {
-        fprintf(stderr, "%sFailed to read image headers from %s.\n",
-                TARGALIB_ERROR, filename);
-        fclose(file);
-        return RETURN_FAIL;
-    }
+	if (fread(&image->header, sizeof(tga_header_t), 1, file) != 1) {
+		fprintf(stderr, "%sFailed to read image headers from %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
 
-    // Check if the image type is supported (usually uncompressed true-color or grayscale)
-    if (image->header.image_type != 2 && image->header.image_type != 3) {
-        fprintf(stderr, "%sUnsupported image type in %s.\n",
-                TARGALIB_ERROR, filename);
-        fclose(file);
-        return RETURN_FAIL;
-    }
+	// Check if the image type is supported (usually uncompressed true-color or grayscale)
+	if (image->header.image_type != 2 && image->header.image_type != 3) {
+		fprintf(stderr, "%sUnsupported image type in %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
 
-    // Check if the bits per pixel is supported (usually 24 or 32 bits)
-    //
+	// Interpret bits per pixel
+	if (image->header.bits_per_pixel != 24 &&
+	    image->header.bits_per_pixel != 32) {
+		fprintf(stderr, "%sUnsupported bits per pixel in %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
 
-    size_t data_size = image->header.width * image->header.height * sizeof(tga_color_t);
-    image->data = (tga_color_t *)malloc(data_size);
+	// Ensure the image dimensions are reasonable
+	if (image->header.width <= 0 || image->header.height <= 0) {
+		fprintf(stderr, "%sInvalid image dimensions in %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
 
-    if (!image->data) {
-        fprintf(stderr, "%sMemory allocation failed for image data %s.\n",
-                TARGALIB_ERROR, filename);
-        fclose(file);
-        return RETURN_FAIL;
-    }
+	// Correct interpretation of bits per pixel
+	image->header.bits_per_pixel = (image->header.bits_per_pixel + 7) / 8;
 
-    if (fread(image->data, data_size, 1, file) != 1) {
-        fprintf(stderr, "%sFailed to read image data from %s.\n",
-                TARGALIB_ERROR, filename);
-        fclose(file);
-        free(image->data);
-        return RETURN_FAIL;
-    }
+	size_t data_size = image->header.width * image->header.height *
+			   sizeof(tga_color_t);
+	image->data = (tga_color_t *)malloc(data_size);
 
-    fclose(file);
-    return RETURN_SUCCESS;
+	if (!image->data) {
+		fprintf(stderr,
+			"%sMemory allocation failed for image data %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
+
+	if (fread(image->data, data_size, 1, file) != 1) {
+		fprintf(stderr, "%sFailed to read image data from %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		free(image->data);
+		return RETURN_FAIL;
+	}
+
+	fclose(file);
+	return RETURN_SUCCESS;
 }
 
-int tga_write(const char *filename, const tga_image_t *image) {
-    FILE *file = fopen(filename, "wb");
-    if (!file) {
-        fprintf(stderr, "%sFailed to open file %s for writing.\n", TARGALIB_ERROR, filename);
-        return RETURN_FAIL;
-    }
+int tga_write(const char *filename, const tga_image_t *image)
+{
+	FILE *file = fopen(filename, "wb");
+	if (!file) {
+		fprintf(stderr, "%sFailed to open file %s for writing.\n",
+			TARGALIB_ERROR, filename);
+		return RETURN_FAIL;
+	}
 
-    // Write TGA header
-    if (fwrite(&image->header, sizeof(tga_header_t), 1, file) != 1) {
-        fprintf(stderr, "%sFailed to write TGA header to %s.\n", TARGALIB_ERROR, filename);
-        fclose(file);
-        return RETURN_FAIL;
-    }
+	// Write TGA header
+	if (fwrite(&image->header, sizeof(tga_header_t), 1, file) != 1) {
+		fprintf(stderr, "%sFailed to write TGA header to %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
 
-    // Write image data
-    size_t data_size = image->header.width * image->header.height * sizeof(tga_color_t);
-    if (fwrite(image->data, data_size, 1, file) != 1) {
-        fprintf(stderr, "%sFailed to write image data to %s.\n", TARGALIB_ERROR, filename);
-        fclose(file);
-        return RETURN_FAIL;
-    }
+	// Write image data
+	size_t data_size = image->header.width * image->header.height *
+			   sizeof(tga_color_t);
+	if (fwrite(image->data, data_size, 1, file) != 1) {
+		fprintf(stderr, "%sFailed to write image data to %s.\n",
+			TARGALIB_ERROR, filename);
+		fclose(file);
+		return RETURN_FAIL;
+	}
 
-    fclose(file);
-    return RETURN_SUCCESS;
+	fclose(file);
+	return RETURN_SUCCESS;
 }
 
+void tga_print_headers(const tga_image_t *image)
+{
+	if (!image) {
+		fprintf(stderr, "%sInvalid image pointer.\n", TARGALIB_ERROR);
+		return;
+	}
+
+	printf("TGA Headers:\n");
+	printf("  ID Length: %d\n", image->header.id_length);
+	printf("  Color Map Type: %d\n", image->header.color_map_type);
+	printf("  Image Type: %d\n", image->header.image_type);
+	printf("  Color Map Origin: %d\n", image->header.color_map_origin);
+	printf("  Color Map Length: %d\n", image->header.color_map_length);
+	printf("  Color Map Depth: %d\n", image->header.color_map_depth);
+	printf("  X Origin: %d\n", image->header.x_origin);
+	printf("  Y Origin: %d\n", image->header.y_origin);
+	printf("  Width: %d\n", image->header.width);
+	printf("  Height: %d\n", image->header.height);
+	printf("  Bits Per Pixel: %d\n", image->header.bits_per_pixel);
+	printf("  Image Descriptor: %d\n", image->header.image_descriptor);
+}
 
 //#endif //TARGALIB_IMPLEMENTATION
 /*
