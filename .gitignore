@@ -1,1 +1,4 @@
-./example/bin
+
+example/bin/
+*.txt
+*.tga

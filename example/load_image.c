@@ -18,5 +18,7 @@ int main()
 		printf("Failed to load image.\n");
 	}
 
+	tga_dump_headers(&image, "output.txt");
+
 	return 0;
 }

@@ -65,11 +65,11 @@ int tga_write(const char *filename, const tga_image_t *image);
 void tga_flip_horizontally();
 void tga_flip_vertically();
 int tga_resize_image(tga_image_t *image, int new_width, int new_height);
-void tga_print_headers(const tga_image_t *image);
+void tga_dump_headers(const tga_image_t *image, const char *output_file);
 
 #endif //__TARGALIB_H__
 
-#ifdef TARGALIB_IMPLEMENTATION
+//#ifdef TARGALIB_IMPLEMENTATION
 
 int tga_read(const char *filename, tga_image_t *image)
 {
@@ -77,7 +77,7 @@ int tga_read(const char *filename, tga_image_t *image)
 	if (!file) {
 		fprintf(stderr, "%s Unable to open file '%s' for reading.\n",
 			TARGALIB_ERROR, filename);
-		return 0;
+		return RETURN_FAIL;
 	}
 
 	// Read TGA header
@@ -116,7 +116,7 @@ int tga_read(const char *filename, tga_image_t *image)
 		fprintf(stderr,
 			"%s Failed to allocate memory for image(%s) data.\n,",
 			TARGALIB_ERROR, filename);
-		return 0;
+		return RETURN_FAIL;
 	}
 
 	// Read image data
@@ -130,7 +130,39 @@ int tga_read(const char *filename, tga_image_t *image)
 	return RETURN_SUCCESS;
 }
 
-#endif //TARGALIB_IMPLEMENTATION
+void tga_dump_headers(const tga_image_t *image, const char *output_file)
+{
+	FILE *dump_file = fopen(output_file, "w");
+	if (!dump_file) {
+		fprintf(stderr, "%s Failed to create header dump file.",
+			TARGALIB_ERROR);
+		fclose(dump_file);
+		return;
+	}
+	fprintf(dump_file, "TGA HEADER DUMP:\n");
+	fprintf(dump_file, "\tid_length:\t%d\n", image->header.id_length);
+	fprintf(dump_file, "\tcolor_map_type:\t%d\n",
+		image->header.color_map_type);
+	fprintf(dump_file, "\timage_type:\t%d\n", image->header.image_type);
+	fprintf(dump_file, "\tcolor_map_origin:\t%d\n",
+		image->header.color_map_origin);
+	fprintf(dump_file, "\tcolor_map_length:\t%d\n",
+		image->header.color_map_length);
+	fprintf(dump_file, "\tcolor_map_depth:\t%d\n",
+		image->header.color_map_depth);
+	fprintf(dump_file, "\tx_origin:\t%d\n", image->header.x_origin);
+	fprintf(dump_file, "\ty_origin:\t%d\n", image->header.y_origin);
+	fprintf(dump_file, "\twidth:\t%d\n", image->header.width);
+	fprintf(dump_file, "\theight:\t%d\n", image->header.height);
+	fprintf(dump_file, "\tbits_per_pixel:\t%d\n",
+		image->header.bits_per_pixel);
+	fprintf(dump_file, "\timage_descriptor:\t%d\n",
+		image->header.image_descriptor);
+
+	fclose(dump_file);
+}
+
+//#endif //TARGALIB_IMPLEMENTATION
 /*
 -------------------------------------------------------------------------------
 This software available under unlicense
