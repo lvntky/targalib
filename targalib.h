@@ -68,6 +68,10 @@ void tga_flip_vertically();
 int tga_resize_image(tga_image_t *image, int new_width, int new_height);
 void tga_dump_headers(const tga_image_t *image, const char *output_file);
 
+#ifdef __cplusplus
+}
+#endif
+
 #endif //__TARGALIB_H__
 
 #ifdef TARGALIB_IMPLEMENTATION
