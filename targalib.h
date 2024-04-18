@@ -43,15 +43,14 @@ typedef struct tga_header {
 } tga_header_t;
 
 typedef struct tga_color {
-	uint8_t r;
-	uint8_t g;
 	uint8_t b;
-	uint8_t a;
+	uint8_t g;
+	uint8_t r;
 } tga_color_t;
 
 typedef struct tga_image {
 	tga_header_t header;
-	uint8_t *image_data;
+	tga_color_t *image_data;
 } tga_image_t;
 
 #ifdef __cplusplus
@@ -62,6 +61,8 @@ tga_image_t *tga_new(uint16_t width, uint16_t height);
 void tga_free(tga_image_t *image);
 int tga_read(const char *filename, tga_image_t *image);
 int tga_write(const char *filename, const tga_image_t *image);
+void tga_set_pixel(const tga_image_t *image, int x, int y, tga_color_t color);
+void tga_set_bg(const tga_image_t *image, tga_color_t color);
 void tga_flip_horizontally();
 void tga_flip_vertically();
 int tga_resize_image(tga_image_t *image, int new_width, int new_height);
@@ -69,7 +70,7 @@ void tga_dump_headers(const tga_image_t *image, const char *output_file);
 
 #endif //__TARGALIB_H__
 
-//#ifdef TARGALIB_IMPLEMENTATION
+#ifdef TARGALIB_IMPLEMENTATION
 
 int tga_read(const char *filename, tga_image_t *image)
 {
@@ -108,7 +109,7 @@ int tga_read(const char *filename, tga_image_t *image)
 	}
 
 	// Allocate memory for image data
-	image->image_data = (unsigned char *)malloc(
+	image->image_data = (tga_color_t *)malloc(
 		image->header.width * image->header.height *
 		(image->header.bits_per_pixel / 8));
 	if (!image->image_data) {
@@ -162,7 +163,116 @@ void tga_dump_headers(const tga_image_t *image, const char *output_file)
 	fclose(dump_file);
 }
 
-//#endif //TARGALIB_IMPLEMENTATION
+tga_image_t *tga_new(uint16_t width, uint16_t height)
+{
+	tga_image_t *image = (tga_image_t *)malloc(sizeof(tga_image_t));
+	if (!image) {
+		fprintf(stderr, "%s Failed to allocate memory for TGA image.\n",
+			TARGALIB_ERROR);
+		return NULL;
+	}
+	// Initialize TGA header fields
+	image->header.id_length = 0;
+	image->header.color_map_type = 0;
+	image->header.image_type = 2; // Uncompressed true-color image
+	image->header.color_map_origin = 0;
+	image->header.color_map_length = 0;
+	image->header.color_map_depth = 0;
+	image->header.x_origin = 0;
+	image->header.y_origin = 0;
+	image->header.width = width;
+	image->header.height = height;
+	image->header.bits_per_pixel = 24; // 24 bits per pixel (RGB)
+	image->header.image_descriptor = 0x00; // Default image descriptor
+
+	image->image_data =
+		(tga_color_t *)malloc(width * height * sizeof(tga_color_t));
+	if (!image->image_data) {
+		fprintf(stderr,
+			"%s Failed to allocate memory for image data.\n",
+			TARGALIB_ERROR);
+		free(image);
+		return NULL;
+	}
+
+	memset(image->image_data, 0, width * height * sizeof(tga_color_t));
+
+	return image;
+}
+
+int tga_write(const char *filename, const tga_image_t *image)
+{
+	FILE *file = fopen(filename, "wb");
+	if (!file) {
+		fprintf(stderr, "%s Unable to open file '%s' for writing.\n",
+			TARGALIB_ERROR, filename);
+		return RETURN_FAIL;
+	}
+
+	// Write TGA header
+	fwrite(&image->header.id_length, sizeof(image->header.id_length), 1,
+	       file);
+	fwrite(&image->header.color_map_type,
+	       sizeof(image->header.color_map_type), 1, file);
+	fwrite(&image->header.image_type, sizeof(image->header.image_type), 1,
+	       file);
+	fwrite(&image->header.color_map_origin,
+	       sizeof(image->header.color_map_origin), 1, file);
+	fwrite(&image->header.color_map_length,
+	       sizeof(image->header.color_map_length), 1, file);
+	fwrite(&image->header.color_map_depth,
+	       sizeof(image->header.color_map_depth), 1, file);
+	fwrite(&image->header.x_origin, sizeof(image->header.x_origin), 1,
+	       file);
+	fwrite(&image->header.y_origin, sizeof(image->header.y_origin), 1,
+	       file);
+	fwrite(&image->header.width, sizeof(image->header.width), 1, file);
+	fwrite(&image->header.height, sizeof(image->header.height), 1, file);
+	fwrite(&image->header.bits_per_pixel,
+	       sizeof(image->header.bits_per_pixel), 1, file);
+	fwrite(&image->header.image_descriptor,
+	       sizeof(image->header.image_descriptor), 1, file);
+
+	// Write image data
+	fwrite(image->image_data, 1,
+	       image->header.width * image->header.height *
+		       (image->header.bits_per_pixel / 8),
+	       file);
+
+	fclose(file);
+	return RETURN_SUCCESS;
+}
+
+void tga_free(tga_image_t *image)
+{
+	if (image) {
+		free(image->image_data);
+		free(image);
+	}
+}
+
+void tga_set_bg(const tga_image_t *image, tga_color_t color)
+{
+	for (int y = 0; y < image->header.height; y++) {
+		for (int x = 0; x < image->header.width; x++) {
+			image->image_data[y * image->header.width + x] = color;
+		}
+	}
+}
+
+void tga_set_pixel(const tga_image_t *image, int x, int y, tga_color_t color)
+{
+	if (x >= 0 && x < image->header.width && y >= 0 &&
+	    y < image->header.height) {
+		image->image_data[y * image->header.width + x] = color;
+	} else {
+		fprintf(stderr, "%s Invalid dot coordinates. Dot not drawn.\n",
+			TARGALIB_ERROR);
+		return;
+	}
+}
+
+#endif //TARGALIB_IMPLEMENTATION
 /*
 -------------------------------------------------------------------------------
 This software available under unlicense
