@@ -69,34 +69,38 @@ void tga_print_headers(const tga_image_t *image);
 
 #endif //__TARGALIB_H__
 
-//#ifdef TARGALIB_IMPLEMENTATION
+#ifdef TARGALIB_IMPLEMENTATION
 
 int tga_read(const char *filename, tga_image_t *image)
 {
 	FILE *file = fopen(filename, "rb");
 	if (!file) {
-		fprintf(stderr,
-			"%s Unable to open file '%s' for reading.\n", TARGALIB_ERROR,
-			filename);
+		fprintf(stderr, "%s Unable to open file '%s' for reading.\n",
+			TARGALIB_ERROR, filename);
 		return 0;
 	}
 
 	// Read TGA header
-	fread(&image->header.id_length, sizeof(image->header.id_length), 1, file);
-	fread(&image->header.color_map_type, sizeof(image->header.color_map_type), 1, file);
-	fread(&image->header.image_type, sizeof(image->header.image_type), 1, file);
-	fread(&image->header.color_map_origin, sizeof(image->header.color_map_origin), 1,
+	fread(&image->header.id_length, sizeof(image->header.id_length), 1,
 	      file);
-	fread(&image->header.color_map_length, sizeof(image->header.color_map_length), 1,
+	fread(&image->header.color_map_type,
+	      sizeof(image->header.color_map_type), 1, file);
+	fread(&image->header.image_type, sizeof(image->header.image_type), 1,
 	      file);
-	fread(&image->header.color_map_depth, sizeof(image->header.color_map_depth), 1, file);
+	fread(&image->header.color_map_origin,
+	      sizeof(image->header.color_map_origin), 1, file);
+	fread(&image->header.color_map_length,
+	      sizeof(image->header.color_map_length), 1, file);
+	fread(&image->header.color_map_depth,
+	      sizeof(image->header.color_map_depth), 1, file);
 	fread(&image->header.x_origin, sizeof(image->header.x_origin), 1, file);
 	fread(&image->header.y_origin, sizeof(image->header.y_origin), 1, file);
 	fread(&image->header.width, sizeof(image->header.width), 1, file);
 	fread(&image->header.height, sizeof(image->header.height), 1, file);
-	fread(&image->header.bits_per_pixel, sizeof(image->header.bits_per_pixel), 1, file);
-	fread(&image->header.image_descriptor, sizeof(image->header.image_descriptor), 1,
-	      file);
+	fread(&image->header.bits_per_pixel,
+	      sizeof(image->header.bits_per_pixel), 1, file);
+	fread(&image->header.image_descriptor,
+	      sizeof(image->header.image_descriptor), 1, file);
 
 	// Skip image ID field if present
 	if (image->header.id_length > 0) {
@@ -105,24 +109,28 @@ int tga_read(const char *filename, tga_image_t *image)
 
 	// Allocate memory for image data
 	image->image_data = (unsigned char *)malloc(
-		image->header.width * image->header.height * (image->header.bits_per_pixel / 8));
+		image->header.width * image->header.height *
+		(image->header.bits_per_pixel / 8));
 	if (!image->image_data) {
 		fclose(file);
 		fprintf(stderr,
-			"%s Failed to allocate memory for image(%s) data.\n,", TARGALIB_ERROR, filename);
+			"%s Failed to allocate memory for image(%s) data.\n,",
+			TARGALIB_ERROR, filename);
 		return 0;
 	}
 
 	// Read image data
 	fread(image->image_data, 1,
-	      image->header.width * image->header.height * (image->header.bits_per_pixel / 8), file);
+	      image->header.width * image->header.height *
+		      (image->header.bits_per_pixel / 8),
+	      file);
 
 	fclose(file);
 
 	return RETURN_SUCCESS;
 }
 
-//#endif //TARGALIB_IMPLEMENTATION
+#endif //TARGALIB_IMPLEMENTATION
 /*
 -------------------------------------------------------------------------------
 This software available under unlicense
