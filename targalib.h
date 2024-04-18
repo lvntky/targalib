@@ -183,7 +183,7 @@ tga_image_t *tga_new(uint16_t width, uint16_t height)
 	image->header.width = width;
 	image->header.height = height;
 	image->header.bits_per_pixel = 24; // 24 bits per pixel (RGB)
-	image->header.image_descriptor = 0x00; // Default image descriptor
+	image->header.image_descriptor = 0x20; // Default image descriptor
 
 	image->image_data =
 		(tga_color_t *)malloc(width * height * sizeof(tga_color_t));
